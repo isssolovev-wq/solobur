@@ -26,7 +26,7 @@
   --accent:#6cc2b0; --accent-soft:#1f3330; --brass:#d6a957;
   --good:#6fcf97; --good-soft:#18301f; --bad:#ef8a73; --bad-soft:#3a201b; --warn:#e6b84d;
   --field:#141b19; color-scheme:dark}
-*{box-sizing:border-box}
+*{box-sizing:border-box} [hidden]{display:none!important}
 body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.45;
   padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:24px 48px}
 .wrap{max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:24px}
@@ -91,6 +91,10 @@ details summary{cursor:pointer;font-weight:600;font-size:14px;color:var(--accent
 .savedhead{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;margin-bottom:12px}
 .savebar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .savebar input{width:240px;max-width:100%}
+.adminhelp{display:flex;flex-direction:column;gap:10px;background:var(--accent-soft);border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:13px}
+.adminhelp ol{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:4px;max-width:90ch}
+.adminrow{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
+.jsonbox{width:100%;min-height:140px;font:12px/1.4 ui-monospace,Menlo,Consolas,monospace;background:var(--field);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px}
 .tbl{overflow-x:auto}
 .tbl table{min-width:900px}
 .lnk{color:var(--accent);font-weight:600;text-decoration:none;white-space:nowrap}
@@ -202,14 +206,30 @@ details summary{cursor:pointer;font-weight:600;font-size:14px;color:var(--accent
 
   <section class="panel saved">
     <div class="savedhead">
-      <h2>Мои лоты</h2>
-      <div class="savebar">
+      <h2 id="lotsTitle">Лоты</h2>
+      <div class="savebar" id="adminBar" hidden>
         <input class="plain" id="lotName" placeholder="Название: адрес, номер торгов" maxlength="120">
         <input class="plain" id="lotLink" type="url" placeholder="Ссылка на торги" maxlength="500">
         <button class="btn primary" type="button" id="saveBtn">Сохранить лот</button>
       </div>
     </div>
     <p class="status" id="status"></p>
+    <div class="adminhelp" id="adminHelp" hidden>
+      <div class="adminrow">
+        <span id="syncState"></span>
+        <div class="savebar">
+          <button class="btn" type="button" id="copyBtn">Скопировать список для сайта</button>
+          <button class="btn" type="button" id="dlBtn">Скачать lots.json</button>
+          <button class="btn" type="button" id="pullBtn">Взять список с сайта</button>
+        </div>
+      </div>
+      <ol>
+        <li>Добавьте или измените лоты и нажмите «Скопировать список для сайта».</li>
+        <li>На GitHub откройте файл <b>lots.json</b>, нажмите карандаш ✏️, выделите всё (Ctrl+A), вставьте (Ctrl+V) и нажмите <b>Commit changes</b>. В первый раз создайте файл: <b>Add file → Create new file</b>, имя <b>lots.json</b>.</li>
+        <li>Через 1–2 минуты после сборки в Timeweb список обновится у всех.</li>
+      </ol>
+      <textarea id="jsonBox" class="jsonbox" readonly hidden aria-label="Список лотов в формате JSON"></textarea>
+    </div>
     <div class="tbl"><table>
       <thead><tr><th>Лот</th><th>Торги</th><th class="n">Сейчас</th><th class="n">Выкуп</th><th class="n">Дисконт к рынку</th><th class="n">Срок</th><th class="n">Чистая прибыль</th><th class="n">Годовых</th><th class="n">Против вклада</th><th></th></tr></thead>
       <tbody id="lots"></tbody>
@@ -319,62 +339,75 @@ function drawChart(o,c){
 function niceStep(r){const p=Math.pow(10,Math.floor(Math.log10(Math.max(r,1))));const f=r/p;return (f<=1?1:f<=2?2:f<=5?5:10)*p}
 function axisLbl(v){if(v===0)return"0";const a=Math.abs(v);return (a>=1e6?(v/1e6).toLocaleString("ru-RU",{maximumFractionDigits:1})+" млн":Math.round(v/1e3)+" тыс").replace("-","−")}
 
-/* ---------- Сохранённые лоты ---------- */
-let lots=[], db=null, pendingDelete=null;
+/* ---------- Лоты: общий список с сайта + режим владельца ---------- */
+let shared=[], local=[], lots=[], pendingDelete=null, isAdmin=false, pullArmed=false;
 const LS="flip-lots-v1";
+function loadLocal(){try{const v=localStorage.getItem(LS);return v==null?null:JSON.parse(v)}catch(e){return null}}
+function storeLocal(){try{localStorage.setItem(LS,JSON.stringify(local))}catch(e){}}
+async function loadShared(){
+  try{const r=await fetch("lots.json?v="+Date.now(),{cache:"no-store"});if(!r.ok)throw 0;const j=await r.json();shared=Array.isArray(j)?j:(Array.isArray(j.lots)?j.lots:[])}
+  catch(e){shared=[]}
+  shared.forEach((l,k)=>{if(!l.id)l.id="s"+k});
+}
+function exportJson(){return JSON.stringify(local.slice().sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)),null,2)}
+function isSynced(){const strip=a=>JSON.stringify(a.map(({id,...r})=>r).sort((x,y)=>(y.createdAt||0)-(x.createdAt||0)));return strip(local)===strip(shared)}
+function updateSync(){if(!isAdmin)return;const ok=isSynced();$("syncState").innerHTML=ok?'<span class="pill good">Список на сайте актуален</span>':'<span class="pill bad">Есть изменения, которых ещё нет на сайте</span>'}
+function applyMode(){
+  isAdmin=location.hash==="#admin";
+  $("adminBar").hidden=!isAdmin;$("adminHelp").hidden=!isAdmin;$("jsonBox").hidden=true;
+  $("lotsTitle").textContent=isAdmin?"Мои лоты · режим владельца":"Лоты";
+  if(isAdmin){const l=loadLocal();local=Array.isArray(l)?l:shared.map(x=>({...x}));if(l==null)storeLocal();lots=local;
+    status("Лоты сохраняются в этом браузере. Чтобы их увидели все, опубликуйте список на GitHub по шагам ниже.")}
+  else{lots=shared;status(shared.length?"Нажмите на лот, чтобы открыть его расчёт. Цифры можно менять для проверки, список при этом не меняется.":"")}
+  current=null;pendingDelete=null;renderLots();updateSync();
+}
 function renderLots(){
   const tb=$("lots");
-  if(!lots.length){tb.innerHTML=`<tr><td colspan="10" class="empty">Пока пусто. Введите цифры лота, дайте ему название и нажмите «Сохранить лот» — здесь появится таблица для сравнения.</td></tr>`;return}
-  tb.innerHTML=lots.map(l=>{const c=calc(l);return `<tr class="lot ${l.id===current?'cur':''}" data-id="${l.id}">
+  if(!lots.length){tb.innerHTML=`<tr><td colspan="10" class="empty">${isAdmin?"Пока пусто. Введите цифры лота, дайте ему название и нажмите «Сохранить лот».":"Список лотов пока пуст."}</td></tr>`;return}
+  tb.innerHTML=lots.map(l=>{const c=calc(l);return `<tr class="lot ${l.id===current?'cur':''}" data-id="${esc(l.id)}">
     <td>${esc(l.name||"Без названия")}</td><td>${safeUrl(l.link)?`<a class="lnk" href="${esc(safeUrl(l.link))}" target="_blank" rel="noopener noreferrer">Открыть ↗</a>`:`<span class="status">—</span>`}</td><td class="n">${l.curPrice?rubS(l.curPrice):"—"}</td><td class="n">${rubS(c.P)}</td><td class="n">${pct(c.discount)}</td><td class="n">${fmtM(c.m)}</td>
     <td class="n ${c.profit<0?'neg':'pos'}">${sgn(c.profit)}</td><td class="n">${pct(c.annual)}</td>
     <td class="n"><span class="pill ${c.diff>0?'good':'bad'}">${sgn(c.diff)}</span></td>
-    <td class="n">${pendingDelete===l.id?`<span class="confirm">Удалить? <button class="x" data-del-yes="${l.id}">Да</button><button class="x" data-del-no>Нет</button></span>`:`<button class="x" data-del="${l.id}" aria-label="Удалить лот">✕</button>`}</td></tr>`}).join("");
+    <td class="n">${!isAdmin?"":pendingDelete===l.id?`<span class="confirm">Удалить? <button class="x" data-del-yes="${esc(l.id)}">Да</button><button class="x" data-del-no>Нет</button></span>`:`<button class="x" data-del="${esc(l.id)}" aria-label="Удалить лот">✕</button>`}</td></tr>`}).join("");
 }
 function safeUrl(u){u=String(u||"").trim();if(!u)return"";if(!/^https?:\/\//i.test(u)&&/^[\w.-]+\.[a-z]{2,}(\/|$)/i.test(u))u="https://"+u;try{const x=new URL(u);return /^https?:$/.test(x.protocol)?x.href:""}catch(e){return""}}
 function esc(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
 function status(t){$("status").textContent=t}
 
-async function initDb(){
-  try{db=await window.claude?.use?.("db")}catch(e){db=null}
-  if(db){
-    db.collection("lots").orderBy("createdAt","desc").onSnapshot(snap=>{
-      lots=snap.docs.map(d=>({id:d.id,...d.data()}));renderLots();
-      status(lots.length?"Лоты хранятся в облаке и видны вам с любого устройства.":"");
-    },e=>{status("Не удалось загрузить лоты: "+(e.message||e.code))});
-  }else{
-    try{lots=JSON.parse(localStorage.getItem(LS)||"[]")}catch(e){lots=[]}
-    status("Лоты сохраняются в этом браузере на этом устройстве.");
-    renderLots();
-  }
-}
-async function saveLot(){
+function saveLot(){
+  if(!isAdmin)return;
   const name=$("lotName").value.trim();
   if(!name){$("lotName").focus();status("Введите название лота, чтобы сохранить его.");return}
   const rawLink=$("lotLink").value.trim();
   if(rawLink&&!safeUrl(rawLink)){$("lotLink").focus();status("Ссылка на торги должна начинаться с http:// или https://");return}
   const data={...readForm(),name,link:safeUrl(rawLink)||"",createdAt:Date.now()};
-  const existing=lots.find(l=>l.id===current&&l.name===name);
-  try{
-    if(db){
-      if(existing){data.createdAt=existing.createdAt;await db.collection("lots").doc(existing.id).set(data)}
-      else{const ref=await db.collection("lots").add(data);current=ref.id}
-    }else{
-      if(existing)Object.assign(existing,data);else{current="l"+Date.now();lots.unshift({id:current,...data})}
-      try{localStorage.setItem(LS,JSON.stringify(lots))}catch(e){}
-      renderLots();
-    }
-    status(existing?"Лот обновлён.":"Лот сохранён.");
-  }catch(e){status("Не удалось сохранить: "+(e.code==="not_granted"?"нет прав на запись в этой странице":(e.message||e.code)))}
+  const existing=local.find(l=>l.id===current&&l.name===name);
+  if(existing){data.createdAt=existing.createdAt;Object.assign(existing,data)}
+  else{current="l"+Date.now();local.unshift({id:current,...data})}
+  storeLocal();renderLots();updateSync();
+  status(existing?"Лот обновлён. Не забудьте опубликовать список на сайте.":"Лот сохранён. Не забудьте опубликовать список на сайте.");
 }
-async function deleteLot(id){
-  pendingDelete=null;
-  try{
-    if(db)await db.collection("lots").doc(id).delete();
-    else{lots=lots.filter(l=>l.id!==id);try{localStorage.setItem(LS,JSON.stringify(lots))}catch(e){}}
-    if(current===id)current=null;
-    renderLots();status("Лот удалён.");
-  }catch(e){status("Не удалось удалить: "+(e.message||e.code))}
+function deleteLot(id){
+  pendingDelete=null;local=local.filter(l=>l.id!==id);storeLocal();
+  if(current===id)current=null;
+  renderLots();updateSync();status("Лот удалён. Не забудьте опубликовать список на сайте.");
+}
+async function copyList(){
+  const txt=exportJson();
+  try{await navigator.clipboard.writeText(txt);$("jsonBox").hidden=true;status("Список скопирован. Вставьте его в файл lots.json на GitHub.")}
+  catch(e){const b=$("jsonBox");b.value=txt;b.hidden=false;b.focus();b.select();status("Не получилось скопировать автоматически. Текст выделен ниже: нажмите Ctrl+C.")}
+}
+function downloadList(){
+  const url=URL.createObjectURL(new Blob([exportJson()],{type:"application/json"}));
+  const a=document.createElement("a");a.href=url;a.download="lots.json";document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),2000);
+  status("Файл скачан. Если браузер назвал его «lots (1).json», переименуйте в lots.json перед загрузкой на GitHub.");
+}
+function pullList(){
+  const b=$("pullBtn");
+  if(!pullArmed){pullArmed=true;b.textContent="Точно? Заменит лоты в этом браузере";setTimeout(()=>{pullArmed=false;b.textContent="Взять список с сайта"},5000);return}
+  pullArmed=false;b.textContent="Взять список с сайта";
+  local=shared.map(x=>({...x}));storeLocal();lots=local;current=null;renderLots();updateSync();status("Загружен список с сайта.");
 }
 
 /* ---------- События ---------- */
@@ -396,6 +429,9 @@ document.querySelectorAll("[data-money]").forEach(el=>{
 });
 $("form").addEventListener("focusout",()=>setTimeout(()=>syncDerived(),0));
 $("saveBtn").addEventListener("click",saveLot);
+$("copyBtn").addEventListener("click",copyList);
+$("dlBtn").addEventListener("click",downloadList);
+$("pullBtn").addEventListener("click",pullList);
 $("lots").addEventListener("click",e=>{
   const d=e.target.closest("[data-del]"),y=e.target.closest("[data-del-yes]"),n=e.target.closest("[data-del-no]");
   if(d){pendingDelete=d.dataset.del;renderLots();return}
@@ -404,11 +440,14 @@ $("lots").addEventListener("click",e=>{
   if(e.target.closest("a"))return;
   const tr=e.target.closest("tr.lot");if(!tr)return;
   const l=lots.find(x=>x.id===tr.dataset.id);if(!l)return;
-  current=l.id;fillForm(l);$("lotName").value=l.name||"";$("lotLink").value=l.link||"";render();status("Открыт лот «"+(l.name||"")+"». Измените цифры и нажмите «Сохранить лот», чтобы обновить его.");
+  current=l.id;fillForm(l);render();
+  if(isAdmin){$("lotName").value=l.name||"";$("lotLink").value=l.link||"";status("Открыт лот «"+(l.name||"")+"». Измените цифры и нажмите «Сохранить лот», чтобы обновить его.")}
+  else status("Открыт лот «"+(l.name||"")+"». Меняйте цифры для проверки, в списке лот останется прежним.");
   window.scrollTo({top:0,behavior:"smooth"});
 });
+window.addEventListener("hashchange",applyMode);
 
-fillForm(EXAMPLE);render();initDb();
+fillForm(EXAMPLE);render();loadShared().then(applyMode);
 </script>
 
 </body>
