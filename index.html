@@ -388,7 +388,7 @@ function saveLot(){
   status(existing?"Лот обновлён. Не забудьте опубликовать список на сайте.":"Лот сохранён. Не забудьте опубликовать список на сайте.");
 }
 function deleteLot(id){
-  pendingDelete=null;local=local.filter(l=>l.id!==id);storeLocal();
+  pendingDelete=null;local=local.filter(l=>l.id!==id);lots=local;storeLocal();
   if(current===id)current=null;
   renderLots();updateSync();status("Лот удалён. Не забудьте опубликовать список на сайте.");
 }
