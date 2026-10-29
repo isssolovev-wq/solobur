@@ -1,0 +1,21 @@
+[
+  {
+    "id": "l1793291921285",
+    "curPrice": 14673000,
+    "price": 15673000,
+    "area": 43.8,
+    "ppm": 452055,
+    "renoPpm": 30000,
+    "otherCost": 100000,
+    "utilMonth": 7000,
+    "months": 6,
+    "realtorPct": 2,
+    "rate": 12.8,
+    "taxMode": "ndfl",
+    "cap": true,
+    "depTax": true,
+    "name": "г. Москва, ш. Ленинградское, д. 92/1, кв. 90, площадью 43,8 кв.м (Этаж № 8), кадастровый номер: 77:09:0001009:6535",
+    "link": "https://tbankrot.ru/item?id=8123905",
+    "createdAt": 1793291921285
+  }
+]
