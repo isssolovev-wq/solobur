@@ -1,0 +1,415 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Калькулятор флиппинга</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=Unbounded:wght@500;700&display=swap">
+<style>
+/* Layout: инструмент в две колонки — слева ввод лота по группам, справа липкая панель итогов; ниже — список сохранённых лотов */
+:root{
+  --bg:#f3f4f1; --surface:#ffffff; --ink:#1b2422; --muted:#5f6b67; --line:#d9ddd8;
+  --accent:#1f5c52; --accent-soft:#e3eeeb; --brass:#a87a2a;
+  --good:#2e7d4f; --good-soft:#e2f2e8; --bad:#b4442f; --bad-soft:#f8e5e0; --warn:#9a6a00;
+  --field:#f8f9f7;
+  --f-display:"Unbounded","Golos Text",system-ui,sans-serif;
+  --f-body:"Golos Text",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#121816; --surface:#1a2220; --ink:#e7ece9; --muted:#9aa7a2; --line:#2c3633;
+  --accent:#6cc2b0; --accent-soft:#1f3330; --brass:#d6a957;
+  --good:#6fcf97; --good-soft:#18301f; --bad:#ef8a73; --bad-soft:#3a201b; --warn:#e6b84d;
+  --field:#141b19; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#121816; --surface:#1a2220; --ink:#e7ece9; --muted:#9aa7a2; --line:#2c3633;
+  --accent:#6cc2b0; --accent-soft:#1f3330; --brass:#d6a957;
+  --good:#6fcf97; --good-soft:#18301f; --bad:#ef8a73; --bad-soft:#3a201b; --warn:#e6b84d;
+  --field:#141b19; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.45;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:24px 48px}
+.wrap{max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:24px}
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px}
+h1{font-family:var(--f-display);font-weight:700;font-size:clamp(22px,3vw,30px);margin:0;letter-spacing:-.01em;text-wrap:balance}
+.sub{color:var(--muted);margin:6px 0 0;max-width:62ch}
+.btn{font:inherit;font-weight:600;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:9px 14px;cursor:pointer}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--surface)}
+.btn:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
+.grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.05fr);gap:24px;align-items:start}
+@media (max-width:860px){.grid{grid-template-columns:1fr}}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:20px;min-width:0}
+.inputs{display:flex;flex-direction:column;gap:22px}
+fieldset{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:12px}
+legend{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--brass);margin-bottom:10px;padding:0}
+.row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+@media (max-width:460px){.row{grid-template-columns:1fr}}
+label.f{display:flex;flex-direction:column;gap:5px;min-width:0}
+label.f span{font-size:13px;color:var(--muted)}
+label.f small{font-size:12px;color:var(--muted)}
+.inp{position:relative;display:flex;align-items:center}
+.inp input,.inp select,input.plain{width:100%;font:inherit;font-variant-numeric:tabular-nums;background:var(--field);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:9px 40px 9px 11px}
+input.plain{padding-right:11px}
+.inp select{padding-right:11px}
+.inp i{position:absolute;right:11px;font-style:normal;color:var(--muted);font-size:13px;pointer-events:none}
+.check{display:flex;gap:8px;align-items:center;font-size:14px}
+.check input{width:16px;height:16px;accent-color:var(--accent)}
+.derived{font-size:13px;color:var(--muted);background:var(--accent-soft);border-radius:8px;padding:8px 11px}
+.derived b{color:var(--ink);font-variant-numeric:tabular-nums}
+
+.results{position:sticky;top:calc(env(safe-area-inset-top,0px) + 12px);display:flex;flex-direction:column;gap:18px}
+@media (max-width:860px){.results{position:static}}
+.verdict{border-radius:10px;padding:16px 18px;display:flex;flex-direction:column;gap:4px}
+.verdict.good{background:var(--good-soft)} .verdict.bad{background:var(--bad-soft)} .verdict.mid{background:var(--accent-soft)}
+.verdict .tag{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+.verdict.good .tag{color:var(--good)} .verdict.bad .tag{color:var(--bad)} .verdict.mid .tag{color:var(--warn)}
+.verdict .big{font-family:var(--f-display);font-weight:700;font-size:clamp(22px,3.2vw,28px);font-variant-numeric:tabular-nums}
+.verdict p{margin:0;color:var(--muted);font-size:14px}
+.kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+@media (max-width:460px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.kpi{border:1px solid var(--line);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.kpi span{font-size:12px;color:var(--muted)}
+.kpi b{font-size:18px;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pos{color:var(--good)} .neg{color:var(--bad)}
+.cmp{display:flex;flex-direction:column;gap:8px}
+.bar{display:grid;grid-template-columns:118px minmax(0,1fr) auto;gap:10px;align-items:center;font-size:13px}
+.bar .track{height:14px;background:var(--field);border:1px solid var(--line);border-radius:4px;overflow:hidden}
+.bar .fill{height:100%;border-radius:3px}
+.bar b{font-variant-numeric:tabular-nums;min-width:92px;text-align:right}
+h3{font-size:13px;font-weight:700;margin:0 0 8px;color:var(--muted);letter-spacing:.04em;text-transform:uppercase}
+.chartbox{overflow-x:auto}
+svg text{fill:var(--muted);font-family:var(--f-body);font-size:11px}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;font-size:14px}
+td,th{padding:6px 0;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+td.n,th.n{text-align:right;white-space:nowrap;padding-left:12px}
+tr.tot td{font-weight:700;border-bottom:0;padding-top:9px}
+details summary{cursor:pointer;font-weight:600;font-size:14px;color:var(--accent)}
+.note{font-size:12px;color:var(--muted);margin:0}
+
+.saved h2{font-family:var(--f-display);font-size:18px;font-weight:500;margin:0}
+.savedhead{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;margin-bottom:12px}
+.savebar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.savebar input{width:240px;max-width:100%}
+.tbl{overflow-x:auto}
+.tbl table{min-width:900px}
+.lnk{color:var(--accent);font-weight:600;text-decoration:none;white-space:nowrap}
+.lnk:hover{text-decoration:underline}
+.tbl th{font-size:12px;color:var(--muted);font-weight:600}
+.tbl tr.lot{cursor:pointer}
+.tbl tr.lot:hover td{background:var(--accent-soft)}
+.tbl tr.cur td{background:var(--accent-soft)}
+.tbl td:first-child{padding-left:8px} .tbl td:last-child{padding-right:8px}
+.x{border:0;background:none;color:var(--muted);cursor:pointer;font:inherit;padding:2px 6px;border-radius:6px}
+.x:hover{color:var(--bad)}
+.empty{color:var(--muted);font-size:14px;padding:14px 0}
+.status{font-size:13px;color:var(--muted)}
+.pill{display:inline-block;font-size:12px;font-weight:600;padding:2px 8px;border-radius:999px}
+.pill.good{background:var(--good-soft);color:var(--good)} .pill.bad{background:var(--bad-soft);color:var(--bad)}
+.confirm{display:inline-flex;gap:6px;align-items:center;font-size:13px}
+@media (prefers-reduced-motion:no-preference){.fill{transition:width .25s ease}}
+</style>
+
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Калькулятор флиппинга с торгов</h1>
+      <p class="sub">Покупка с торгов → косметический ремонт → продажа. Сравнение с тем, что дал бы вклад на те же деньги и тот же срок.</p>
+    </div>
+  </header>
+
+  <div class="grid">
+    <form class="panel inputs" id="form" autocomplete="off">
+      <fieldset>
+        <legend>Лот на торгах</legend>
+        <div class="row">
+          <label class="f"><span>Стоимость лота сейчас</span><div class="inp"><input id="curPrice" data-money inputmode="decimal"><i>₽</i></div><small>текущая цена на торгах</small></label>
+          <label class="f"><span>Цена выкупа</span><div class="inp"><input id="price" data-money inputmode="decimal"><i>₽</i></div><small>до какой цены поднимаемся, по ней идёт расчёт</small></label>
+        </div>
+        <div class="row">
+          <label class="f"><span>Площадь</span><div class="inp"><input id="area" inputmode="decimal"><i>м²</i></div></label>
+          <label class="f"><span>Стоимость м² по цене выкупа</span><div class="inp"><input id="buyPpm" data-money inputmode="decimal"><i>₽/м²</i></div><small>считается сама, можно ввести вручную</small></label>
+        </div>
+        <div class="derived" id="derived0"></div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Рыночная стоимость</legend>
+        <div class="row">
+          <label class="f"><span>Средняя рыночная цена</span><div class="inp"><input id="ppm" data-money inputmode="decimal"><i>₽/м²</i></div></label>
+          <label class="f"><span>Площадь</span><div class="inp"><input id="area2" inputmode="decimal"><i>м²</i></div></label>
+        </div>
+        <label class="f"><span>Общая рыночная стоимость (цена продажи)</span><div class="inp"><input id="mktTotal" data-money inputmode="decimal"><i>₽</i></div><small>считается из цены м² и площади, можно ввести вручную</small></label>
+        <div class="derived" id="derived1"></div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Расходы на объект</legend>
+        <div class="row">
+          <label class="f"><span>Косметический ремонт</span><div class="inp"><input id="renoPpm" data-money inputmode="decimal"><i>₽/м²</i></div></label>
+          <label class="f"><span>Коммуналка и налог на имущество</span><div class="inp"><input id="utilMonth" data-money inputmode="decimal"><i>₽/мес</i></div></label>
+        </div>
+        <label class="f"><span>Прочие разовые расходы</span><div class="inp"><input id="otherCost" data-money inputmode="decimal"><i>₽</i></div><small>юрист, пошлина, долги ЖКУ, выписка</small></label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Продажа</legend>
+        <div class="row">
+          <label class="f"><span>Срок проекта до получения денег</span><div class="inp"><input id="months" inputmode="decimal"><i>мес</i></div><small>регистрация + ремонт + экспозиция</small></label>
+          <label class="f"><span>Риелтор при продаже</span><div class="inp"><input id="realtorPct" inputmode="decimal"><i>%</i></div></label>
+        </div>
+        <label class="f"><span>Налог с продажи</span><div class="inp"><select id="taxMode">
+          <option value="ndfl">Физлицо: НДФЛ 13% (15% с суммы свыше 2,4 млн) с прибыли</option>
+          <option value="usn6">ИП УСН «доходы» 6% от цены продажи</option>
+          <option value="usn15">ИП УСН «доходы − расходы» 15%</option>
+          <option value="none">Не учитывать (владение дольше минимального срока)</option>
+        </select></div></label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Альтернатива: банковский вклад</legend>
+        <div class="row">
+          <label class="f"><span>Ставка вклада</span><div class="inp"><input id="rate" inputmode="decimal"><i>% год.</i></div></label>
+          <div style="display:flex;flex-direction:column;gap:8px;justify-content:flex-end">
+            <label class="check"><input type="checkbox" id="cap"> Ежемесячная капитализация</label>
+            <label class="check"><input type="checkbox" id="depTax"> Вычесть НДФЛ 13% с процентов</label>
+          </div>
+        </div>
+      </fieldset>
+    </form>
+
+    <section class="panel results" aria-live="polite">
+      <div class="verdict" id="verdict"></div>
+      <div class="kpis" id="kpis"></div>
+      <div>
+        <h3>Доход на те же деньги за <span id="mLbl"></span></h3>
+        <div class="cmp" id="cmp"></div>
+      </div>
+      <div>
+        <h3>Если продажа затянется</h3>
+        <div class="chartbox"><svg id="chart" viewBox="0 0 520 190" width="100%" role="img" aria-label="Прибыль флиппинга и доход вклада в зависимости от срока"></svg></div>
+        <p class="note" id="chartNote"></p>
+      </div>
+      <details>
+        <summary>Подробный расчёт</summary>
+        <table id="breakdown" style="margin-top:8px"></table>
+        <p class="note" style="margin-top:8px">Расчёт упрощённый: все вложения считаются сделанными в момент покупки. НДФЛ с продажи — по ставкам 2026 года, без учёта других ваших доходов за год. Проверяйте налог с бухгалтером.</p>
+      </details>
+    </section>
+  </div>
+
+  <section class="panel saved">
+    <div class="savedhead">
+      <h2>Мои лоты</h2>
+      <div class="savebar">
+        <input class="plain" id="lotName" placeholder="Название: адрес, номер торгов" maxlength="120">
+        <input class="plain" id="lotLink" type="url" placeholder="Ссылка на торги" maxlength="500">
+        <button class="btn primary" type="button" id="saveBtn">Сохранить лот</button>
+      </div>
+    </div>
+    <p class="status" id="status"></p>
+    <div class="tbl"><table>
+      <thead><tr><th>Лот</th><th>Торги</th><th class="n">Сейчас</th><th class="n">Выкуп</th><th class="n">Дисконт к рынку</th><th class="n">Срок</th><th class="n">Чистая прибыль</th><th class="n">Годовых</th><th class="n">Против вклада</th><th></th></tr></thead>
+      <tbody id="lots"></tbody>
+    </table></div>
+  </section>
+</div>
+
+<script>
+const EXAMPLE={name:"",curPrice:5200000,price:5900000,area:54,ppm:145000,renoPpm:15000,otherCost:80000,utilMonth:7000,months:6,realtorPct:2,taxMode:"ndfl",rate:14,cap:true,depTax:false};
+const NUM=["curPrice","price","area","ppm","renoPpm","otherCost","utilMonth","months","realtorPct","rate"];
+const $=id=>document.getElementById(id);
+const rub=v=>(Math.round(v)).toLocaleString("ru-RU").replace(/ /g," ")+" ₽";
+const rubS=v=>{const a=Math.abs(v);let s;if(a>=1e6)s=(v/1e6).toLocaleString("ru-RU",{maximumFractionDigits:2})+" млн";else if(a>=1e3)s=Math.round(v/1e3).toLocaleString("ru-RU")+" тыс";else s=Math.round(v).toLocaleString("ru-RU");return s.replace(/ /g," ")+" ₽"};
+const pct=(v,d=1)=>(v*100).toLocaleString("ru-RU",{maximumFractionDigits:d,minimumFractionDigits:d})+"%";
+const sgn=v=>(v>0?"+":"")+rubS(v).replace("-","−");
+const parse=s=>{const v=parseFloat(String(s).replace(/\s/g,"").replace(",","."));return isFinite(v)?v:0};
+const fmtIn=(el,v)=>{el.value=el.dataset.money!==undefined?Math.round(v).toLocaleString("ru-RU").replace(/ /g," "):String(v).replace(".",",")};
+
+let current=null; // id сохранённого лота, загруженного в форму
+
+function readForm(){const o={};NUM.forEach(k=>o[k]=parse($(k).value));o.taxMode=$("taxMode").value;o.cap=$("cap").checked;o.depTax=$("depTax").checked;return o}
+function fillForm(o){NUM.forEach(k=>fmtIn($(k),k==="curPrice"?(o.curPrice??o.price??0):(o[k]??EXAMPLE[k])));syncDerived();$("taxMode").value=o.taxMode||"ndfl";$("cap").checked=!!o.cap;$("depTax").checked=!!o.depTax}
+
+function calc(o,overrideMonths,overridePrice){
+  const m=Math.max(overrideMonths??o.months,0.1), P=overridePrice??o.price;
+  const market=o.area*o.ppm, sale=market;
+  const reno=o.area*o.renoPpm, comm=0, util=o.utilMonth*m;
+  const invest=P+comm+o.otherCost+reno+util;
+  const saleCost=sale*o.realtorPct/100;
+  const deductible=P+comm+o.otherCost+reno+saleCost;
+  let tax=0;
+  if(o.taxMode==="ndfl"){const b=Math.max(sale-deductible,0);tax=Math.min(b,2.4e6)*.13+Math.max(b-2.4e6,0)*.15}
+  else if(o.taxMode==="usn6")tax=sale*.06;
+  else if(o.taxMode==="usn15"){const b=sale-deductible-util;tax=Math.max(b*.15,sale*.01)}
+  const profit=sale-saleCost-tax-invest;
+  const roi=invest>0?profit/invest:0;
+  const annual=roi>-1?Math.pow(1+roi,12/m)-1:-1;
+  const r=o.rate/100;
+  let bank=o.cap?invest*(Math.pow(1+r/12,m)-1):invest*r*m/12;
+  if(o.depTax)bank*=.87;
+  return {m,P,market,sale,reno,comm,util,invest,saleCost,tax,profit,roi,annual,bank,diff:profit-bank,discount:market>0?1-P/market:0};
+}
+function breakEvenPrice(o){
+  let lo=0,hi=o.area*o.ppm*1.2;
+  if(calc(o,null,lo).diff<0)return null;
+  for(let i=0;i<60;i++){const mid=(lo+hi)/2;calc(o,null,mid).diff>0?lo=mid:hi=mid}
+  return lo;
+}
+function breakEvenMonths(o){
+  for(let m=1;m<=48;m++){if(calc(o,m).diff<=0)return m}
+  return null;
+}
+
+function render(){
+  const o=readForm(), c=calc(o);
+  $("derived1").innerHTML=`Покупка дешевле рынка на <b>${pct(c.discount)}</b> · разница <b>${rub(c.market-c.P)}</b>`;
+  const be=breakEvenPrice(o), bm=breakEvenMonths(o);
+  {const cur=o.curPrice,up=c.P-cur;let t=cur>0?`От текущей цены до выкупа: <b>${up>=0?"+":"−"}${rub(Math.abs(up))}</b> (${up>=0?"+":"−"}${pct(Math.abs(up)/cur)})`:"Укажите текущую цену лота";
+   if(be!=null&&cur>0)t+=be>=cur?` · предел, при котором выгоднее вклада: <b>${rub(be)}</b>, запас от текущей цены <b>${rub(be-cur)}</b>`:` · <b class="neg">текущая цена уже выше предела ${rub(be)}</b>`;
+   $("derived0").innerHTML=t}
+  const v=$("verdict");
+  let cls,tag,txt;
+  if(c.profit<=0){cls="bad";tag="Убыток";txt="Сделка не окупает вложения даже без сравнения с вкладом."}
+  else if(c.diff>0){cls="good";tag="Выгоднее вклада";txt=`Флиппинг даёт на ${rubS(c.diff)} больше, чем вклад под ${String(o.rate).replace(".",",")}% за тот же срок.`}
+  else {cls="mid";tag="Вклад выгоднее";txt=`Прибыль есть, но вклад принёс бы на ${rubS(-c.diff)} больше и без риска.`}
+  v.className="verdict "+cls;
+  v.innerHTML=`<span class="tag">${tag}</span><span class="big ${c.profit<0?'neg':''}">${sgn(c.profit)}</span><p>${txt}</p>`+
+    (be!=null?`<p>Максимальная цена выкупа, при которой выгоднее вклада: <b>${rub(be)}</b>${bm?` · при этой цене выкупа вклад обгоняет с ${bm}-го месяца`:""}</p>`:`<p>При этих параметрах вклад выгоднее при любой цене покупки.</p>`);
+  const k=[["Вложения всего",rubS(c.invest),""],["Рентабельность за срок",pct(c.roi),c.roi<0?"neg":"pos"],["Годовая доходность",pct(c.annual),c.annual*100<o.rate?"neg":"pos"],["Доход вклада",rubS(c.bank),""],["Налог",rubS(c.tax),""],["Ставка вклада",String(o.rate).replace(".",",")+"%",""]];
+  $("kpis").innerHTML=k.map(([a,b,cl])=>`<div class="kpi"><span>${a}</span><b class="${cl}">${b}</b></div>`).join("");
+  $("mLbl").textContent=fmtM(o.months);
+  const mx=Math.max(Math.abs(c.profit),c.bank,1);
+  const bar=(label,val,col)=>`<div class="bar"><span>${label}</span><div class="track"><div class="fill" style="width:${Math.max(Math.abs(val)/mx*100,1)}%;background:${col}"></div></div><b class="${val<0?'neg':''}">${sgn(val)}</b></div>`;
+  $("cmp").innerHTML=bar("Флиппинг",c.profit,c.profit<0?"var(--bad)":"var(--accent)")+bar("Вклад",c.bank,"var(--brass)");
+  drawChart(o,c);
+  $("breakdown").innerHTML=[
+    ["Цена выкупа на торгах",c.P],["Прочие разовые расходы",o.otherCost],["Косметический ремонт ("+o.area+" м²)",c.reno],["Коммуналка за "+fmtM(c.m),c.util],
+  ].map(([a,b])=>`<tr><td>${a}</td><td class="n">${rub(b)}</td></tr>`).join("")+
+  `<tr class="tot"><td>Вложения</td><td class="n">${rub(c.invest)}</td></tr>`+
+  [["Цена продажи",c.sale],["Риелтор",-c.saleCost],["Налог",-c.tax],["Минус вложения",-c.invest]].map(([a,b])=>`<tr><td>${a}</td><td class="n">${rub(b)}</td></tr>`).join("")+
+  `<tr class="tot"><td>Чистая прибыль</td><td class="n ${c.profit<0?'neg':'pos'}">${rub(c.profit)}</td></tr>`+
+  `<tr><td>Доход вклада на ${rubS(c.invest)}</td><td class="n">${rub(c.bank)}</td></tr>`+
+  `<tr class="tot"><td>Разница с вкладом</td><td class="n ${c.diff<0?'neg':'pos'}">${rub(c.diff)}</td></tr>`;
+  renderLots();
+}
+function fmtM(m){m=Math.round(m*10)/10;const n=Math.floor(m)%100,l=n%10;const w=(n>10&&n<20)?"месяцев":l===1?"месяц":(l>=2&&l<=4)?"месяца":"месяцев";return String(m).replace(".",",")+" "+(Number.isInteger(m)?w:"мес.")}
+
+function drawChart(o,c){
+  const W=520,H=190,L=58,R=12,T=12,B=28,N=24;
+  const pts=[];for(let m=1;m<=N;m++){const r=calc(o,m);pts.push([m,r.profit,r.bank])}
+  let lo=Math.min(0,...pts.map(p=>Math.min(p[1],p[2]))),hi=Math.max(...pts.map(p=>Math.max(p[1],p[2])),1);
+  const step=niceStep((hi-lo)/4);lo=Math.floor(lo/step)*step;hi=Math.ceil(hi/step)*step;
+  const x=m=>L+(m-1)/(N-1)*(W-L-R), y=v=>T+(hi-v)/(hi-lo)*(H-T-B);
+  let s="";
+  for(let v=lo;v<=hi+1e-6;v+=step){s+=`<line x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)" stroke-width="${v===0?1.5:1}"/><text x="${L-6}" y="${y(v)+4}" text-anchor="end">${axisLbl(v)}</text>`}
+  [1,6,12,18,24].forEach(m=>s+=`<text x="${x(m)}" y="${H-8}" text-anchor="middle">${m} мес</text>`);
+  const line=(i,col,dash)=>`<polyline fill="none" stroke="${col}" stroke-width="2.2" ${dash?'stroke-dasharray="5 4"':''} points="${pts.map(p=>x(p[0])+","+y(p[i])).join(" ")}"/>`;
+  s+=line(2,"var(--brass)",true)+line(1,"var(--accent)");
+  const cm=Math.min(Math.max(o.months,1),N);
+  s+=`<line x1="${x(cm)}" x2="${x(cm)}" y1="${T}" y2="${H-B}" stroke="var(--muted)" stroke-dasharray="2 3"/>`;
+  s+=`<circle cx="${x(cm)}" cy="${y(calc(o,cm).profit)}" r="4" fill="var(--accent)"/><circle cx="${x(cm)}" cy="${y(calc(o,cm).bank)}" r="4" fill="var(--brass)"/>`;
+  s+=`<rect x="${L+8}" y="${T+2}" width="10" height="3" fill="var(--accent)"/><text x="${L+22}" y="${T+7}">Прибыль флиппинга</text><rect x="${L+140}" y="${T+2}" width="10" height="3" fill="var(--brass)"/><text x="${L+154}" y="${T+7}">Вклад</text>`;
+  $("chart").innerHTML=s;
+  const bm=breakEvenMonths(o);
+  $("chartNote").textContent=bm?`Каждый лишний месяц добавляет коммуналку и даёт вкладу время расти. При сроке от ${fmtM(bm)} вклад становится выгоднее.`:"В пределах двух лет флиппинг остаётся выгоднее вклада.";
+}
+function niceStep(r){const p=Math.pow(10,Math.floor(Math.log10(Math.max(r,1))));const f=r/p;return (f<=1?1:f<=2?2:f<=5?5:10)*p}
+function axisLbl(v){if(v===0)return"0";const a=Math.abs(v);return (a>=1e6?(v/1e6).toLocaleString("ru-RU",{maximumFractionDigits:1})+" млн":Math.round(v/1e3)+" тыс").replace("-","−")}
+
+/* ---------- Сохранённые лоты ---------- */
+let lots=[], db=null, pendingDelete=null;
+const LS="flip-lots-v1";
+function renderLots(){
+  const tb=$("lots");
+  if(!lots.length){tb.innerHTML=`<tr><td colspan="10" class="empty">Пока пусто. Введите цифры лота, дайте ему название и нажмите «Сохранить лот» — здесь появится таблица для сравнения.</td></tr>`;return}
+  tb.innerHTML=lots.map(l=>{const c=calc(l);return `<tr class="lot ${l.id===current?'cur':''}" data-id="${l.id}">
+    <td>${esc(l.name||"Без названия")}</td><td>${safeUrl(l.link)?`<a class="lnk" href="${esc(safeUrl(l.link))}" target="_blank" rel="noopener noreferrer">Открыть ↗</a>`:`<span class="status">—</span>`}</td><td class="n">${l.curPrice?rubS(l.curPrice):"—"}</td><td class="n">${rubS(c.P)}</td><td class="n">${pct(c.discount)}</td><td class="n">${fmtM(c.m)}</td>
+    <td class="n ${c.profit<0?'neg':'pos'}">${sgn(c.profit)}</td><td class="n">${pct(c.annual)}</td>
+    <td class="n"><span class="pill ${c.diff>0?'good':'bad'}">${sgn(c.diff)}</span></td>
+    <td class="n">${pendingDelete===l.id?`<span class="confirm">Удалить? <button class="x" data-del-yes="${l.id}">Да</button><button class="x" data-del-no>Нет</button></span>`:`<button class="x" data-del="${l.id}" aria-label="Удалить лот">✕</button>`}</td></tr>`}).join("");
+}
+function safeUrl(u){u=String(u||"").trim();if(!u)return"";if(!/^https?:\/\//i.test(u)&&/^[\w.-]+\.[a-z]{2,}(\/|$)/i.test(u))u="https://"+u;try{const x=new URL(u);return /^https?:$/.test(x.protocol)?x.href:""}catch(e){return""}}
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
+function status(t){$("status").textContent=t}
+
+async function initDb(){
+  try{db=await window.claude?.use?.("db")}catch(e){db=null}
+  if(db){
+    db.collection("lots").orderBy("createdAt","desc").onSnapshot(snap=>{
+      lots=snap.docs.map(d=>({id:d.id,...d.data()}));renderLots();
+      status(lots.length?"Лоты хранятся в облаке и видны вам с любого устройства.":"");
+    },e=>{status("Не удалось загрузить лоты: "+(e.message||e.code))});
+  }else{
+    try{lots=JSON.parse(localStorage.getItem(LS)||"[]")}catch(e){lots=[]}
+    status("Лоты сохраняются в этом браузере на этом устройстве.");
+    renderLots();
+  }
+}
+async function saveLot(){
+  const name=$("lotName").value.trim();
+  if(!name){$("lotName").focus();status("Введите название лота, чтобы сохранить его.");return}
+  const rawLink=$("lotLink").value.trim();
+  if(rawLink&&!safeUrl(rawLink)){$("lotLink").focus();status("Ссылка на торги должна начинаться с http:// или https://");return}
+  const data={...readForm(),name,link:safeUrl(rawLink)||"",createdAt:Date.now()};
+  const existing=lots.find(l=>l.id===current&&l.name===name);
+  try{
+    if(db){
+      if(existing){data.createdAt=existing.createdAt;await db.collection("lots").doc(existing.id).set(data)}
+      else{const ref=await db.collection("lots").add(data);current=ref.id}
+    }else{
+      if(existing)Object.assign(existing,data);else{current="l"+Date.now();lots.unshift({id:current,...data})}
+      try{localStorage.setItem(LS,JSON.stringify(lots))}catch(e){}
+      renderLots();
+    }
+    status(existing?"Лот обновлён.":"Лот сохранён.");
+  }catch(e){status("Не удалось сохранить: "+(e.code==="not_granted"?"нет прав на запись в этой странице":(e.message||e.code)))}
+}
+async function deleteLot(id){
+  pendingDelete=null;
+  try{
+    if(db)await db.collection("lots").doc(id).delete();
+    else{lots=lots.filter(l=>l.id!==id);try{localStorage.setItem(LS,JSON.stringify(lots))}catch(e){}}
+    if(current===id)current=null;
+    renderLots();status("Лот удалён.");
+  }catch(e){status("Не удалось удалить: "+(e.message||e.code))}
+}
+
+/* ---------- События ---------- */
+function setIf(id,v,src){const el=$(id);if(el!==src&&document.activeElement!==el)fmtIn(el,Math.round(v*100)/100)}
+function syncDerived(src){const a=parse($("area").value);
+  setIf("area2",a,src);
+  setIf("buyPpm",a>0?parse($("price").value)/a:0,src);
+  setIf("mktTotal",a*parse($("ppm").value),src)}
+$("form").addEventListener("input",e=>{const id=e.target.id,v=parse(e.target.value);
+  if(id==="area2"){$("area").value=e.target.value}
+  const a=parse($("area").value);
+  if(id==="buyPpm")fmtIn($("price"),Math.round(v*a));
+  if(id==="mktTotal"&&a>0)fmtIn($("ppm"),Math.round(v/a));
+  syncDerived(e.target);render()});
+$("form").addEventListener("submit",e=>e.preventDefault());
+document.querySelectorAll("[data-money]").forEach(el=>{
+  el.addEventListener("focus",()=>{el.value=el.value.replace(/\s/g,"")});
+  el.addEventListener("blur",()=>fmtIn(el,parse(el.value)));
+});
+$("form").addEventListener("focusout",()=>setTimeout(()=>syncDerived(),0));
+$("saveBtn").addEventListener("click",saveLot);
+$("lots").addEventListener("click",e=>{
+  const d=e.target.closest("[data-del]"),y=e.target.closest("[data-del-yes]"),n=e.target.closest("[data-del-no]");
+  if(d){pendingDelete=d.dataset.del;renderLots();return}
+  if(y){deleteLot(y.dataset.delYes);return}
+  if(n){pendingDelete=null;renderLots();return}
+  if(e.target.closest("a"))return;
+  const tr=e.target.closest("tr.lot");if(!tr)return;
+  const l=lots.find(x=>x.id===tr.dataset.id);if(!l)return;
+  current=l.id;fillForm(l);$("lotName").value=l.name||"";$("lotLink").value=l.link||"";render();status("Открыт лот «"+(l.name||"")+"». Измените цифры и нажмите «Сохранить лот», чтобы обновить его.");
+  window.scrollTo({top:0,behavior:"smooth"});
+});
+
+fillForm(EXAMPLE);render();initDb();
+</script>
+
+</body>
+</html>
