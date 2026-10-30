@@ -1,5 +1,24 @@
 [
   {
+    "id": "l1793354956214",
+    "curPrice": 13686000,
+    "price": 14186000,
+    "area": 52.6,
+    "ppm": 308696,
+    "renoPpm": 30000,
+    "otherCost": 80000,
+    "utilMonth": 7000,
+    "months": 6,
+    "realtorPct": 0,
+    "rate": 12.8,
+    "taxMode": "ndfl",
+    "cap": true,
+    "depTax": true,
+    "name": "г. Москва, ул. Магнитогорская, д. 17, кв. 44, общей площадью 52,6 кв. м. (Этаж № 11), кадастровый номер: 77:03:0005024:4",
+    "link": "https://tbankrot.ru/item?id=8123905",
+    "createdAt": 1793354956214
+  },
+  {
     "id": "l1793291921285",
     "curPrice": 14673000,
     "price": 15673000,
